@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/coreos/go-systemd/sdjournal"
@@ -18,42 +18,29 @@ var (
 		MonotonicTimestamp: 0x1104d38}
 )
 
-//func TestFoo(t *testing.T) {
-//
-//	c := jbconf{}
-//	b, err := json.Marshal(c)
-//	if err != nil {
-//		t.Error("unexpected error", err)
-//	}
-//	fmt.Println(string(b))
-//
-//}
-
-func tempfile(b []byte) (string, error) {
-	f, err := ioutil.TempFile("", "config-")
-	if err != nil {
-		return "", err
-	}
-	f.Write(b)
-	f.Close()
-	return f.Name(), nil
-}
-
 func TestConfigure(t *testing.T) {
 
-	f, _ := tempfile([]byte(`{"elasticsearch_url":"http://localhost:9200"}`))
-	defer os.Remove(f)
-	_, err := configure(f)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+	tests := []struct {
+		json string
+		err  bool
+	}{
+		{`{"elasticsearch_url":"http://localhost:9200"}`, false},
+		{`{"elasticsearch_url":1}`, true},
 	}
 
-	f, _ = tempfile([]byte(`{"elasticsearch_url":1}`))
-	defer os.Remove(f)
-	_, err = configure(f)
-	if !strings.HasSuffix(fmt.Sprint(err), "cannot unmarshal number into Go value of type string") {
-		t.Errorf("unexpected error: %v", err)
+	for _, test := range tests {
+		f, _ := ioutil.TempFile("", "journalbeatlite-test-")
+		defer os.Remove(f.Name())
+		f.Write([]byte(test.json))
+		_, err := configure(f.Name())
+		if err != nil {
+			log.Println(err)
+			if !test.err {
+				t.Errorf("unexpected error: %v", err)
+			}
+		}
 	}
+
 }
 
 func TestCommit(t *testing.T) {

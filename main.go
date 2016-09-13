@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	DEFAULTCONFIG = "config.json"
-	DEFAULTCURSOR = "cursor"
+	DEFAULTCONFIG = "./config.json"
+	DEFAULTCURSOR = "./cursor"
 )
 
 type jbconf struct {
@@ -134,8 +134,8 @@ func format(c *jbconf, e *sdjournal.JournalEntry) *libbeatlite.Message {
 	return &libbeatlite.Message{Source: source, Id: i}
 }
 
-// Does atomic write to the cursor file
 func commit(filename, cursor string) error {
+	// atomic write to the cursor file
 
 	f, err := filepath.Abs(filename)
 	if err != nil {
@@ -167,46 +167,50 @@ func commit(filename, cursor string) error {
 	return nil
 }
 
+const Version = "0.3.0"
+
 var (
-	version   = "0.2.1"
-	BuildHash string
-	BuildDate string
-	DEBUG     = false
+	LibBuildHash string
+	BuildHash    string
+	BuildDate    string
 )
 
 func main() {
 
-	path := flag.String("config", "./config.json", "path to the config file")
-	info := flag.Bool("version", false, "print version information and exit")
+	path := flag.String("config", "./config.json", "path to the config file; prints sample config file when config=''")
+	version := flag.Bool("version", false, "print version information and exit")
 	noop := flag.Bool("noop", false, "do not send data to elasticsearch or advance the cursor; implies -debug")
-	debug := flag.Bool("debug", false, "turn on debugging output")
+    debug := flag.Bool("debug", false, "turn on debugging output")
 	flag.Parse()
 
-	if *info {
-		fmt.Printf("version: %q build: %q date: %q\n", version, BuildHash, BuildDate)
-		return
+	if *version {
+		fmt.Printf("journalbeatlite\tversion: %q build: %q date: %q\n", Version, BuildHash, BuildDate)
+		fmt.Printf("libbeatlite\tversion: %q build: %q\n", libbeatlite.Version, LibBuildHash)
+        os.Exit(0)
 	}
+
+    if *path == "" {
+        // print sample config file
+		c := jbconf{CursorFile: DEFAULTCURSOR, Client: libbeatlite.Client{URL: "http://127.0.0.1:9200", Name: "journalbeatlite"}}
+		b, _ := json.MarshalIndent(c, "", "    ")
+		fmt.Println(string(b))
+        os.Exit(0)
+    }
 
 	config, err := configure(*path)
 	if err != nil {
-		c := jbconf{CursorFile: DEFAULTCURSOR, Client: libbeatlite.Client{URL: "http://127.0.0.1:9200", Name: "journalbeatlite"}}
-		b, _ := json.MarshalIndent(c, "", "    ")
-		log.Printf("error loading config: %v", err)
-		log.Printf("here is a template for the config file: \n")
-		fmt.Println(string(b))
-		os.Exit(1)
+        log.Fatal(err)
 	}
 	b, _ := json.Marshal(config)
 	log.Println(string(b))
 
+    if *debug {
+        config.Debug=true
+    }
+
 	if *noop {
 		config.Noop = true // Noop is embedded field from config.Client
-		*debug = true
-	}
-
-	if *debug {
-		libbeatlite.DEBUG = true
-		DEBUG = true
+		config.Debug = true
 	}
 
 	eventChan, err := tail(config.cursor)
@@ -223,12 +227,12 @@ func main() {
 		// called, but that is really neat!
 		_, err := config.Client.Send(m)
 		if err != nil {
-			log.Panic(err)
+			log.Fatal(err)
 		}
 		if !config.Noop {
 			err = commit(config.CursorFile, event.Cursor)
 			if err != nil {
-				log.Panic(err)
+				log.Fatalf("error updating cursor offset: %v", err)
 			}
 		}
 	}

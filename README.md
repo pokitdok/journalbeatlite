@@ -14,9 +14,9 @@ wget -Nnv https://s3.amazonaws.com/binaries-and-debs/bin/linux/journalbeatlite/j
 	&& chmod 0700 journalbeatlite
 ```
 
-Config
+Configuration file
 ---
-If no valid config file is found, the error message will include a template for a config file, which is self explanatory.
+Calling `journalbeatlite -config=` will print configuration file template to stdout. The default location for the configuration file is `./config.json`.
 
 Indexing (idempotent)
 ---
