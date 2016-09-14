@@ -9,7 +9,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -98,20 +97,14 @@ func tail(cursor string) (chan *sdjournal.JournalEntry, error) {
 }
 
 func format(c *jbconf, e *sdjournal.JournalEntry) *libbeatlite.Message {
+	// this would be the code to change if you are not happy with how the messages are formatted
 
-	journal := make(map[string]interface{})
+	journal := make(map[string]string)
 	journal["__CURSOR"] = e.Cursor
-
-	// copy fields, where possible converting from string to int
 	for k, v := range e.Fields {
-		if i, err := strconv.ParseInt(v, 10, 64); err == nil {
-			journal[k] = i
-		} else {
-			journal[k] = v
-		}
+		journal[k] = v
 	}
-
-	message := journal["MESSAGE"].(string)
+	message := e.Fields["MESSAGE"]
 	delete(journal, "MESSAGE")
 
 	source := map[string]interface{}{
@@ -167,7 +160,7 @@ func commit(filename, cursor string) error {
 	return nil
 }
 
-const Version = "0.3.0"
+const Version = "0.4.0"
 
 var (
 	LibBuildHash string
@@ -180,33 +173,33 @@ func main() {
 	path := flag.String("config", "./config.json", "path to the config file; prints sample config file when config=''")
 	version := flag.Bool("version", false, "print version information and exit")
 	noop := flag.Bool("noop", false, "do not send data to elasticsearch or advance the cursor; implies -debug")
-    debug := flag.Bool("debug", false, "turn on debugging output")
+	debug := flag.Bool("debug", false, "turn on debugging output")
 	flag.Parse()
 
 	if *version {
 		fmt.Printf("journalbeatlite\tversion: %q build: %q date: %q\n", Version, BuildHash, BuildDate)
 		fmt.Printf("libbeatlite\tversion: %q build: %q\n", libbeatlite.Version, LibBuildHash)
-        os.Exit(0)
+		os.Exit(0)
 	}
 
-    if *path == "" {
-        // print sample config file
+	if *path == "" {
+		// print sample config file
 		c := jbconf{CursorFile: DEFAULTCURSOR, Client: libbeatlite.Client{URL: "http://127.0.0.1:9200", Name: "journalbeatlite"}}
 		b, _ := json.MarshalIndent(c, "", "    ")
 		fmt.Println(string(b))
-        os.Exit(0)
-    }
+		os.Exit(0)
+	}
 
 	config, err := configure(*path)
 	if err != nil {
-        log.Fatal(err)
+		log.Fatal(err)
 	}
 	b, _ := json.Marshal(config)
 	log.Println(string(b))
 
-    if *debug {
-        config.Debug=true
-    }
+	if *debug {
+		config.Debug = true
+	}
 
 	if *noop {
 		config.Noop = true // Noop is embedded field from config.Client

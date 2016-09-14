@@ -1,6 +1,0 @@
-{
-  "elasticsearch_url": "https://10.0.2.2",
-  "beat_name": "journalbeatlite",
-  "ignore_invalid_server_cert": true,
-  "cursor_file_name": "/tmp/cursor"
-}

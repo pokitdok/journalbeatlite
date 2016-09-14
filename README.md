@@ -1,6 +1,6 @@
 Purpose
 ---
-`journalbeatlite` tails the journal, and uploads parsed messages to elasticsearch. It has 2 key features:
+`journalbeatlite` tails the systemd journal, and uploads parsed messages to elasticsearch. It has 2 key features:
 
 1. cursors are used as document ids; this means uploads are idempotent
 2. message body can be parsed if it is json, and stored as structured field
@@ -16,51 +16,65 @@ wget -Nnv https://s3.amazonaws.com/binaries-and-debs/bin/linux/journalbeatlite/j
 
 Configuration file
 ---
-Calling `journalbeatlite -config=` will print configuration file template to stdout. The default location for the configuration file is `./config.json`.
+Calling `journalbeatlite -config=` will print configuration file template to stdout.
 
 Indexing (idempotent)
 ---
-An index will be created per day. Messages will be routed to indexes based on their timestamp (provided by the journal). Each message will be indexed with `id = sha256(cursor)`. This means that a messages can be safely indexed more than once without creating duplicates.
+An index will be created per day with pattern `[beat_name]-YYYY.MM.DD`, with `beat_name` specified in the config file; `beat_name` defaults to `journalbeatlite`. Messages will be routed to indexes based on their timestamp. Each message will be indexed with `id = sha256(cursor)`. This means that a messages can be safely indexed more than once without creating duplicates.
+
+Timestamps
+---
+Each message's `@timestamp` field is based on `__REALTIME_TIMESTAMP` field of the journal entry.
 
 Cursor offsets
 ---
-The cursor of the last successfully indexed message is stored in the file specified by the `"cursor_file_name"` value in the config (defaults to `./cursor`). When the cursor file is present, journalbeatlite will start reading from the journal at the specified offset. When the file is absent, it will start from the beginning of the journal. 
+The cursor of the last successfully indexed message is stored in the file specified by the `cursor_file_name` value in the config (defaults to `./cursor`). When the cursor file is present, journalbeatlite will start reading from the journal at the specified offset. When the file is absent, it will start from the beginning of the journal.
 
-Metadata
+The offset file is read only at startup, so if you want to force reindexing by removing the offset file (or setting it to a different cursor) you will need to bounce the journalbeatlite.
+
+Failfast
 ---
-A typical message, as indexed into elasticsearch, has a lot of juicy bits. Get excited!
+Any error will result in the program exiting. There is no retry / reconnect logic. The offset file will always store the cursor of the last successfuly indexed message. The idea is that journalbeatlite is run as a systemd service, and so you can handle backoffs / restarts there. Possible errors include: inability to read from the journal, inability to connect to elasticsearch, response code from elasticsearch other than 200 or 201.
+
+Format
+---
+A typical message, as indexed into elasticsearch. 
 
 ```json
 {
-  "@timestamp": "2016-08-12T17:17:01.740Z",
+  "@timestamp": "2016-09-14T18:51:39.984Z",
   "beat": {
-    "hostname": "dev",
+    "hostname": "journalbeatlite",
     "name": "journalbeatlite"
   },
   "journal": {
-    "PRIORITY": 6,
-    "SYSLOG_FACILITY": 10,
-    "SYSLOG_IDENTIFIER": "CRON",
-    "SYSLOG_PID": 10658,
-    "_AUDIT_LOGINUID": 0,
-    "_AUDIT_SESSION": 23,
-    "_BOOT_ID": "1788b7b5dba644cebfeb422b6027c379",
-    "_CAP_EFFECTIVE": "3fffffffff",
-    "_CMDLINE": "/usr/sbin/CRON -f",
-    "_COMM": "cron",
-    "_EXE": "/usr/sbin/cron",
-    "_GID": 0,
-    "_HOSTNAME": "dev",
-    "_MACHINE_ID": "a8503c78c5a5473f86f44dff20bb348e",
-    "_PID": 10658,
-    "_SOURCE_REALTIME_TIMESTAMP": 1471022221740688,
-    "_SYSTEMD_CGROUP": "/system.slice/cron.service",
+    "CODE_FILE": "../src/login/logind-session.c",
+    "CODE_FUNCTION": "session_finalize",
+    "CODE_LINE": "685",
+    "LEADER": "28903",
+    "MESSAGE_ID": "3354939424b4456d9802ca8333ed424a",
+    "PRIORITY": "6",
+    "SESSION_ID": "15",
+    "SYSLOG_FACILITY": "4",
+    "SYSLOG_IDENTIFIER": "systemd-logind",
+    "USER_ID": "ubuntu",
+    "_BOOT_ID": "87030f182f8747a39a977d7e1041d017",
+    "_CAP_EFFECTIVE": "24420002f",
+    "_CMDLINE": "/lib/systemd/systemd-logind",
+    "_COMM": "systemd-logind",
+    "_EXE": "/lib/systemd/systemd-logind",
+    "_GID": "0",
+    "_HOSTNAME": "journalbeatlite",
+    "_MACHINE_ID": "11897cef820f42bd8357415b5fb4b2f9",
+    "_PID": "1984",
+    "_SOURCE_REALTIME_TIMESTAMP": "1473879099984448",
+    "_SYSTEMD_CGROUP": "/system.slice/systemd-logind.service",
     "_SYSTEMD_SLICE": "system.slice",
-    "_SYSTEMD_UNIT": "cron.service",
-    "_TRANSPORT": "syslog",
-    "_UID": 0,
-    "__CURSOR": "s=d7e23b1de2714e50aa0f6c387c0b6b19;i=684;b=1788b7b5dba644cebfeb422b6027c379;m=9d34c4ac5;t=539e30cfbcaea;x=9df82c74cc53b0f8"
+    "_SYSTEMD_UNIT": "systemd-logind.service",
+    "_TRANSPORT": "journal",
+    "_UID": "0",
+    "__CURSOR": "s=dd49c009db51435c88709fedc1dd51ca;i=689;b=87030f182f8747a39a977d7e1041d017;m=5aaa9fe8f;t=53c7c38324b2f;x=1368ac2395b42703"
   },
-  "message": "pam_unix(cron:session): session closed for user root"
+  "message": "Removed session 15."
 }
 ```

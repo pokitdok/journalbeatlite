@@ -22,22 +22,28 @@ func TestConfigure(t *testing.T) {
 
 	tests := []struct {
 		json string
+		name string
 		err  bool
 	}{
-		{`{"elasticsearch_url":"http://localhost:9200"}`, false},
-		{`{"elasticsearch_url":1}`, true},
+		{`{"elasticsearch_url":"http://localhost:9200"}`, "journalbeatlite", false},
+		{`{"elasticsearch_url":"http://localhost:9200","beat_name":"foo"}`, "foo", false},
+		{`{"elasticsearch_url":1}`, "", true},
 	}
 
 	for _, test := range tests {
 		f, _ := ioutil.TempFile("", "journalbeatlite-test-")
 		defer os.Remove(f.Name())
 		f.Write([]byte(test.json))
-		_, err := configure(f.Name())
+		c, err := configure(f.Name())
 		if err != nil {
 			log.Println(err)
 			if !test.err {
 				t.Errorf("unexpected error: %v", err)
 			}
+			continue
+		}
+		if c.Name != test.name {
+			t.Errorf("expected beat name %q got %q", test.name, c.Name)
 		}
 	}
 
@@ -69,14 +75,7 @@ func TestFormat(t *testing.T) {
 
 	c := &jbconf{}
 	m := format(c, EVENT)
-	j := m.Source["journal"].(map[string]interface{})
 
-	if _, ok := j["_MACHINE_ID"].(string); !ok {
-		t.Errorf("expected string, got: %T", m.Source["_MACHINE_ID"])
-	}
-	if _, ok := j["_PID"].(int64); !ok {
-		t.Errorf("expected int, got: %T", m.Source["_PID"])
-	}
 	if m.Source["@timestamp"] != "2016-07-29T21:04:26.424Z" {
 		t.Errorf("expected %q got %q", "2016-07-29T21:04:26.424Z", m.Source["@timestamp"])
 	}
